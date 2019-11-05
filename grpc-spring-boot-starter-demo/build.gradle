@@ -1,10 +1,17 @@
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBoot_1_X_Version}")
+    }
+}
 apply plugin: 'com.google.protobuf'
-apply plugin: 'spring-boot'
+apply plugin: 'org.springframework.boot'
 
 dependencies {
-    compile "io.grpc:grpc-stub:${grpcVersion}"
-    compile "io.grpc:grpc-protobuf:${grpcVersion}"
-    compile "io.grpc:grpc-netty:${grpcVersion}"
+
     compile "org.springframework.boot:spring-boot-starter-actuator"
     compile 'org.springframework.boot:spring-boot-starter-web'
 
@@ -12,7 +19,8 @@ dependencies {
     compile project(':grpc-spring-boot-starter')
 
     testCompile 'org.springframework.boot:spring-boot-starter-aop'
-    testCompile('org.springframework.boot:spring-boot-starter-test')
+    testCompile 'org.springframework.boot:spring-boot-starter-test'
+    testCompile 'com.github.stefanbirkner:system-rules:1.18.0'
 }
 sourceSets {
     main {
@@ -24,7 +32,7 @@ sourceSets {
 
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:3.0.0'
+        artifact = 'com.google.protobuf:protoc:3.5.1'
     }
     plugins {
         grpc {
@@ -55,10 +63,11 @@ task cleanProtoGen{
     }
 }
 clean.dependsOn cleanProtoGen
+bootRepackage.enabled  =false
 
 dependencyManagement {
     imports {
-        mavenBom "org.springframework.boot:spring-boot-starter-parent:${springBootVersion}"
+        mavenBom "org.springframework.boot:spring-boot-starter-parent:${springBoot_1_X_Version}"
     }
 }
 

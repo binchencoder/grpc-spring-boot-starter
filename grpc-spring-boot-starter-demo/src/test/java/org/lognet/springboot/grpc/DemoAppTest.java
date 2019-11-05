@@ -1,16 +1,19 @@
 package org.lognet.springboot.grpc;
 
-import static org.junit.Assert.*;
-import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.DEFINED_PORT;
-
-import java.util.concurrent.ExecutionException;
-
-import io.grpc.*;
+import io.grpc.ServerInterceptor;
 import io.grpc.examples.CalculatorGrpc;
 import io.grpc.examples.CalculatorOuterClass;
-import org.hamcrest.CoreMatchers;
-import org.junit.After;
-import org.junit.Before;
+import io.grpc.examples.GreeterGrpc;
+import io.grpc.examples.GreeterOuterClass;
+import io.grpc.health.v1.HealthCheckRequest;
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.health.v1.HealthGrpc;
+import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
+import io.grpc.reflection.v1alpha.ServerReflectionRequest;
+import io.grpc.reflection.v1alpha.ServerReflectionResponse;
+import io.grpc.reflection.v1alpha.ServiceResponse;
+import io.grpc.stub.StreamObserver;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,17 +28,29 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.junit4.SpringRunner;
 
-import io.grpc.examples.GreeterGrpc;
-import io.grpc.examples.GreeterOuterClass;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.not;
+import static org.junit.Assert.*;
+import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
 /**
  * Created by alexf on 28-Jan-16.
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = {DemoApp.class,TestConfig.class}, webEnvironment = DEFINED_PORT)
-public class DemoAppTest {
+@SpringBootTest(classes = {DemoApp.class, TestConfig.class}, webEnvironment = RANDOM_PORT
+        , properties = {"grpc.enableReflection=true",
+        "grpc.port=0"
+})
+public class DemoAppTest extends GrpcServerTestBase{
 
-    private ManagedChannel channel;
+    @Autowired
+    private TestRestTemplate restTemplate;
 
     @Rule
     public OutputCapture outputCapture = new OutputCapture();
@@ -45,30 +60,10 @@ public class DemoAppTest {
     private  ServerInterceptor globalInterceptor;
 
 
-
-    @Before
-    public void setup() {
-        channel = ManagedChannelBuilder.forAddress("localhost", 6565)
-            .usePlaintext(true)
-            .build();
-    }
-
-    @After
-    public void tearDown() {
-        channel.shutdown();
-    }
-
     @Test
-    public void simpleGreeting() throws ExecutionException, InterruptedException {
-
-
-        String name ="John";
-        final GreeterGrpc.GreeterFutureStub greeterFutureStub = GreeterGrpc.newFutureStub(channel);
-        final GreeterOuterClass.HelloRequest helloRequest =GreeterOuterClass.HelloRequest.newBuilder().setName(name).build();
-        final String reply = greeterFutureStub.sayHello(helloRequest).get().getMessage();
-        assertNotNull(reply);
-        assertTrue(String.format("Replay should contain name '%s'",name),reply.contains(name));
-
+    public void disabledServerTest() throws Throwable {
+        assertNotNull(grpcServerRunner);
+        assertNull(grpcInprocessServerRunner);
     }
 
     @Test
@@ -87,18 +82,63 @@ public class DemoAppTest {
 
 
         // log interceptor should be invoked only on GreeterService and not CalculatorService
-        outputCapture.expect(CoreMatchers.containsString(GreeterGrpc.METHOD_SAY_HELLO.getFullMethodName()));
-        outputCapture.expect(CoreMatchers.not(CoreMatchers.containsString(CalculatorGrpc.METHOD_CALCULATE.getFullMethodName())));
+        outputCapture.expect(containsString(GreeterGrpc.getSayHelloMethod().getFullMethodName()));
+        outputCapture.expect(not(containsString(CalculatorGrpc.getCalculateMethod().getFullMethodName())));
 
+
+        outputCapture.expect(containsString("I'm not Spring bean interceptor and still being invoked..."));
     }
 
         @Test
     public void actuatorTest() throws ExecutionException, InterruptedException {
-        final TestRestTemplate template = new TestRestTemplate();
-
-        ResponseEntity<String> response = template.getForEntity("http://localhost:8080/env", String.class);
+        ResponseEntity<String> response = restTemplate.getForEntity("/env", String.class);
         assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
 
+    @Test
+    public void testDefaultConfigurer(){
+        Assert.assertEquals("Default configurer should be picked up",
+                context.getBean(GRpcServerBuilderConfigurer.class).getClass(),
+                GRpcServerBuilderConfigurer.class);
+    }
+
+    @Test
+    public void testReflection() throws InterruptedException {
+        List<String> discoveredServiceNames = new ArrayList<>();
+        ServerReflectionRequest request = ServerReflectionRequest.newBuilder().setListServices("services").setHost("localhost").build();
+        CountDownLatch latch = new CountDownLatch(1);
+        ServerReflectionGrpc.newStub(channel).serverReflectionInfo(new StreamObserver<ServerReflectionResponse>() {
+            @Override
+            public void onNext(ServerReflectionResponse value) {
+                List<ServiceResponse> serviceList = value.getListServicesResponse().getServiceList();
+                for (ServiceResponse serviceResponse : serviceList) {
+                    discoveredServiceNames.add(serviceResponse.getName());
+                }
+            }
+
+            @Override
+            public void onError(Throwable t) {
+
+            }
+
+            @Override
+            public void onCompleted() {
+                latch.countDown();
+            }
+        }).onNext(request);
+
+        latch.await(3, TimeUnit.SECONDS);
+        assertFalse(discoveredServiceNames.isEmpty());
+    }
+
+
+    @Test
+    public void testHealthCheck() throws ExecutionException, InterruptedException {
+        final HealthCheckRequest healthCheckRequest = HealthCheckRequest.newBuilder().setService(GreeterGrpc.getServiceDescriptor().getName()).build();
+        final HealthGrpc.HealthFutureStub healthFutureStub = HealthGrpc.newFutureStub(channel);
+        final HealthCheckResponse.ServingStatus servingStatus = healthFutureStub.check(healthCheckRequest).get().getStatus();
+        assertNotNull(servingStatus);
+        assertEquals(servingStatus, HealthCheckResponse.ServingStatus.SERVING);
+    }
 }

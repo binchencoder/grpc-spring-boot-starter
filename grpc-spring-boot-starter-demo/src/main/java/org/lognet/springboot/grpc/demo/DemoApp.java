@@ -6,6 +6,7 @@ import io.grpc.examples.CalculatorOuterClass;
 import org.lognet.springboot.grpc.GRpcService;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 
 import io.grpc.examples.GreeterGrpc;
 import io.grpc.examples.GreeterOuterClass;
@@ -19,17 +20,12 @@ import io.grpc.stub.StreamObserver;
 @SpringBootApplication
 public class DemoApp {
 
-    @GRpcService(interceptors = { LogInterceptor.class })
-    public static class GreeterService extends GreeterGrpc.GreeterImplBase {
-        @Override
-        public void sayHello(GreeterOuterClass.HelloRequest request, StreamObserver<GreeterOuterClass.HelloReply> responseObserver) {
-            final GreeterOuterClass.HelloReply.Builder replyBuilder = GreeterOuterClass.HelloReply.newBuilder().setMessage("Hello " + request.getName());
-            responseObserver.onNext(replyBuilder.build());
-            responseObserver.onCompleted();
-        }
-    }
+    @Bean
+    public GreeterService greeterService() {
+		return new GreeterService();
+	}
 
-    @GRpcService
+    @GRpcService(interceptors = NotSpringBeanInterceptor.class)
     public static class CalculatorService extends CalculatorGrpc.CalculatorImplBase{
         @Override
         public void calculate(CalculatorOuterClass.CalculatorRequest request, StreamObserver<CalculatorOuterClass.CalculatorResponse> responseObserver) {
