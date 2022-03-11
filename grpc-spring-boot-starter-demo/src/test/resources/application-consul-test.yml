@@ -1,0 +1,17 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+    consul:
+      discovery:
+        enabled: true
+      enabled: true
+      port: ${embedded.consul.port}
+      host: ${embedded.consul.host}
+    service-registry:
+      auto-registration:
+        enabled: true
+grpc:
+  consul:
+    discovery:
+      prefer-ip-address: true

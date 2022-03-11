@@ -1,75 +1,126 @@
-
 buildscript {
     repositories {
         mavenCentral()
     }
     dependencies {
-        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBoot_1_X_Version}")
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
+        classpath "com.netflix.nebula:nebula-project-plugin:7.0.7"
     }
 }
+plugins {
+    id "io.github.lognet.grpc-spring-boot"
+}
+
+apply plugin: 'java'
 apply plugin: 'com.google.protobuf'
 apply plugin: 'org.springframework.boot'
+apply plugin: 'io.spring.dependency-management'
+apply plugin: "nebula.facet"
+
+facets {
+    pureNettyTest
+    kafkaStreamTest
+    customSecurityTest
+    bothPureAndShadedNettyTest
+    noConsulDependenciesTest
+}
+
+grpcSpringBoot {
+    grpcSpringBootStarterVersion.set((String)null)
+}
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.boot:spring-boot-starter-parent:${springBootVersion}"
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+configurations.findAll{ cfg ->
+    if (cfg.name.startsWith("pureNetty")) {
+        cfg.exclude group: 'io.grpc', module: 'grpc-netty-shaded'
+
+    }
+
+    if (cfg.name.startsWith("customSecurity")) {
+        cfg.exclude group: 'org.springframework.security', module: 'spring-security-oauth2-resource-server'
+        cfg.exclude group: 'org.springframework.security', module: 'spring-security-oauth2-jose'
+    }
+    if (cfg.name.startsWith("noConsulDependencies")) {
+        cfg.exclude group: 'org.springframework.cloud', module: 'spring-cloud-starter-consul-discovery'
+
+    }
+
+
+
+}
+
+
+extensions.facets.each{
+    if(it.name.endsWith("Test")) {
+        configurations.getByName("${it.name}Compile").extendsFrom(configurations.testCompile)
+        configurations.getByName("${it.name}Runtime").extendsFrom(configurations.testRuntime)
+
+        dependencies.add("${it.name}Compile", sourceSets.test.output)
+    }
+}
 
 dependencies {
 
-    compile "org.springframework.boot:spring-boot-starter-actuator"
-    compile 'org.springframework.boot:spring-boot-starter-web'
+    implementation "org.springframework.boot:spring-boot-starter-actuator"
+    implementation "io.micrometer:micrometer-registry-prometheus"
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    implementation "org.springframework.security:spring-security-config"
+    implementation "org.springframework.security:spring-security-oauth2-jose"
+    implementation "org.springframework.security:spring-security-oauth2-resource-server"
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
 
-    compile project(':grpc-spring-boot-starter')
+    implementation project(':grpc-spring-boot-starter')
+    implementation project(':grpc-client-spring-boot-starter')
 
     testCompile 'org.springframework.boot:spring-boot-starter-aop'
     testCompile 'org.springframework.boot:spring-boot-starter-test'
     testCompile 'com.github.stefanbirkner:system-rules:1.18.0'
+    testCompile('org.springframework.cloud:spring-cloud-starter-consul-discovery')
+    testCompile 'org.awaitility:awaitility:4.0.3'
+    testCompile "org.springframework.cloud:spring-cloud-config-server"
+    testCompile "org.springframework.cloud:spring-cloud-config-client"
+    testCompile "org.springframework.cloud:spring-cloud-starter-bootstrap"
+
+    testCompile "com.playtika.testcontainers:embedded-keycloak:2.0.18"
+    testCompile "com.playtika.testcontainers:embedded-consul:2.0.18"
+
+    testImplementation 'org.hamcrest:hamcrest:2.2'
+    testImplementation 'org.mockito:mockito-core:2.23.0'
+
+
+    pureNettyTestCompile "io.grpc:grpc-netty"
+
+
+    bothPureAndShadedNettyTestCompile "io.grpc:grpc-netty"
+
+    kafkaStreamTestCompile "com.playtika.testcontainers:embedded-kafka:2.0.18"
+    kafkaStreamTestCompile "org.springframework.cloud:spring-cloud-starter-stream-kafka"
+
+
 }
-sourceSets {
-    main {
-        java {
-            srcDir 'src/main/protoGen'
+
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if ("io.grpc".equalsIgnoreCase(details.requested.group)) {
+            details.useVersion grpcVersion
         }
     }
 }
 
-protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc:3.5.1'
-    }
-    plugins {
-        grpc {
-            artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
-        }
-    }
-
-    generateProtoTasks {
-        ofSourceSet('main').each { task ->
-            task.builtins {
-                java{
-                    outputSubDir = 'protoGen'
-                }
-            }
-            task.plugins {
-                grpc {
-                    outputSubDir = 'protoGen'
-                }
-            }
-        }
-    }
-    generatedFilesBaseDir = "$projectDir/src/"
+bootJar{
+    enabled false
+}
+jar{
+    enabled true
 }
 
-task cleanProtoGen{
-    doFirst{
-           delete("$projectDir/src/main/protoGen")
-    }
-}
-clean.dependsOn cleanProtoGen
-bootRepackage.enabled  =false
-
-dependencyManagement {
-    imports {
-        mavenBom "org.springframework.boot:spring-boot-starter-parent:${springBoot_1_X_Version}"
-    }
-}
 
 
 

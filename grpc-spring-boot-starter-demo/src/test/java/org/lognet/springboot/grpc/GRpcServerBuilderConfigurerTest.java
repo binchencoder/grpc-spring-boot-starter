@@ -10,7 +10,7 @@ import org.junit.runner.RunWith;
 import org.lognet.springboot.grpc.demo.DemoApp;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.rule.OutputCapture;
+import org.springframework.boot.test.system.OutputCaptureRule;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 
@@ -25,7 +25,7 @@ import static org.lognet.springboot.grpc.TestConfig.CUSTOM_EXECUTOR_MESSAGE;
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = {DemoApp.class,TestConfig.class},
         webEnvironment = SpringBootTest.WebEnvironment.NONE
-        ,properties = "grpc.port=7777")
+        ,properties = {"grpc.port=7777","grpc.shutdownGrace=-1"})
 @ActiveProfiles(profiles = {"customServerBuilder"})
 public class GRpcServerBuilderConfigurerTest {
 
@@ -35,7 +35,7 @@ public class GRpcServerBuilderConfigurerTest {
     private GRpcServerBuilderConfigurer configurer;
 
     @Rule
-    public OutputCapture outputCapture = new OutputCapture();
+    public OutputCaptureRule outputCapture = new OutputCaptureRule();
 
     @Before
     public void setup() {

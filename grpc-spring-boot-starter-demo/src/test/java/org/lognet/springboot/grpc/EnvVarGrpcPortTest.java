@@ -1,5 +1,6 @@
 package org.lognet.springboot.grpc;
 
+import io.grpc.examples.GreeterGrpc;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.ClassRule;
@@ -8,6 +9,8 @@ import org.junit.runner.RunWith;
 import org.lognet.springboot.grpc.context.LocalRunningGrpcPort;
 import org.lognet.springboot.grpc.demo.DemoApp;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.SocketUtils;
 
@@ -15,6 +18,8 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = {DemoApp.class}, webEnvironment = NONE)
+@ActiveProfiles({"disable-security","default-port"})
+@DirtiesContext
 public class EnvVarGrpcPortTest extends GrpcServerTestBase {
 
 
@@ -44,8 +49,9 @@ public class EnvVarGrpcPortTest extends GrpcServerTestBase {
     }
 
     @Override
-    protected void beforeGreeting() {
+    protected GreeterGrpc.GreeterFutureStub beforeGreeting(GreeterGrpc.GreeterFutureStub stub) {
         Assert.assertEquals(randomPort, gRpcServerProperties.getPort().intValue());
         Assert.assertEquals(randomPort, runningPort);
+        return stub;
     }
 }

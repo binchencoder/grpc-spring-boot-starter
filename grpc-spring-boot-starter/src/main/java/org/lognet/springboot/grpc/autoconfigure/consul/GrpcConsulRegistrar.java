@@ -1,60 +1,46 @@
 package org.lognet.springboot.grpc.autoconfigure.consul;
 
-import com.ecwid.consul.v1.agent.model.NewService;
+import org.lognet.springboot.grpc.autoconfigure.GRpcServerProperties;
 import org.lognet.springboot.grpc.context.GRpcServerInitializedEvent;
-import org.springframework.cloud.consul.discovery.ConsulDiscoveryProperties;
-import org.springframework.cloud.consul.serviceregistry.ConsulAutoRegistration;
 import org.springframework.cloud.consul.serviceregistry.ConsulRegistration;
 import org.springframework.cloud.consul.serviceregistry.ConsulServiceRegistry;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.event.EventListener;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class GrpcConsulRegistrar implements SmartLifecycle {
 
-    private ConsulRegistration registration;
-    private ConsulServiceRegistry consulServiceRegistry;
+    private final ConsulServiceRegistry consulServiceRegistry;
+
+    private List<ConsulRegistration> registrations;
 
     public GrpcConsulRegistrar(ConsulServiceRegistry consulServiceRegistry) {
         this.consulServiceRegistry = consulServiceRegistry;
     }
 
     @EventListener
-    public void onGrpcServerStarted(GRpcServerInitializedEvent initializedEvent) {
-        registration = getRegistration(initializedEvent);
-        consulServiceRegistry.register(registration);
-    }
+    public void onGrpcServerStarted(GRpcServerInitializedEvent event) {
 
-
-    private ConsulRegistration getRegistration(GRpcServerInitializedEvent event) {
         ApplicationContext applicationContext = event.getApplicationContext();
 
-
-        ConsulDiscoveryProperties properties = applicationContext.getBean(ConsulDiscoveryProperties.class);
-
-        NewService grpcService = new NewService();
-        grpcService.setPort(event.getServer().getPort());
-        if (!properties.isPreferAgentAddress()) {
-            grpcService.setAddress(properties.getHostname());
-        }
-        String appName = "grpc-" + ConsulAutoRegistration.getAppName(properties, applicationContext.getEnvironment());
-        grpcService.setName(ConsulAutoRegistration.normalizeForDns(appName));
-        grpcService.setId("grpc-" + ConsulAutoRegistration.getInstanceId(properties, applicationContext));
-
-/*
-        service.setTags(createTags(properties));
-        setCheck(service, autoServiceRegistrationProperties, properties, context,
-                    heartbeatProperties);
+        final GRpcServerProperties.ConsulProperties gRpcConsulProperties = applicationContext
+                .getBean(GRpcServerProperties.class)
+                .getConsul();
 
 
+        registrations = gRpcConsulProperties.getRegistrationMode()
+                .createServices(event.getServer(),applicationContext)
+                .stream()
+                .map(s->new ConsulRegistration(s, gRpcConsulProperties.getDiscovery()))
+                .collect(Collectors.toList());
 
-
-
-        */
-
-
-        return new ConsulRegistration(grpcService, properties);
+        registrations.forEach(consulServiceRegistry::register);
     }
+
+
 
 
     @Override
@@ -76,15 +62,15 @@ public class GrpcConsulRegistrar implements SmartLifecycle {
     @Override
     public synchronized void stop() {
 
-        consulServiceRegistry.deregister(registration);
+        registrations.forEach(consulServiceRegistry::deregister);
         consulServiceRegistry.close();
-        registration = null;
+        registrations = null;
 
     }
 
     @Override
     public synchronized boolean isRunning() {
-        return null != registration;
+        return null != registrations;
     }
 
     @Override

@@ -1,25 +1,21 @@
 buildscript {
-    ext {
-        springBoot_1_X_Version = '1.5.13.RELEASE'
-        springBoot_2_X_Version = '2.1.3.RELEASE'
-        grpcVersion = '1.24.0'
-    }
     repositories {
         mavenCentral()
-        jcenter()
         maven { url 'http://repo.spring.io/plugins-release' }
         maven { url "https://plugins.gradle.org/m2/" }
 
+        maven { url 'https://repo.spring.io/snapshot' }
+
+
     }
     dependencies {
-        classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:1.5"
-        classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.5'
-        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.0.0"
-        classpath 'com.palantir:jacoco-coverage:0.4.0'
-        classpath "io.codearte.gradle.nexus:gradle-nexus-staging-plugin:0.21.1"
-        classpath "de.marcphilipp.gradle:nexus-publish-plugin:0.3.1"
+        classpath "io.codearte.gradle.nexus:gradle-nexus-staging-plugin:0.30.0"
+        classpath "de.marcphilipp.gradle:nexus-publish-plugin:0.4.0"
+        classpath "net.ltgt.gradle:gradle-errorprone-plugin:${gradleErrorPronePluginVersion}"
     }
 }
+
+
 
 allprojects { pr ->
     pr['signing.keyId'] = System.getenv('GPG_ID')
@@ -29,7 +25,6 @@ allprojects { pr ->
 
 }
 apply plugin: 'idea'
-apply plugin: 'com.palantir.jacoco-full-report'
 apply plugin: 'jacoco'
 apply from: "${rootDir}/publishSonatype.gradle"
 
@@ -37,8 +32,12 @@ apply from: "${rootDir}/publishSonatype.gradle"
 allprojects {
     repositories {
         mavenCentral()
-        jcenter()
+        maven { url 'https://repo.spring.io/release' }
+        maven { url "https://jitpack.io" }
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
+        maven { url 'https://repo.spring.io/snapshot' }
         maven { url "https://repo.spring.io/milestone" }
+
     }
 }
 
@@ -46,21 +45,41 @@ subprojects {
 
     apply plugin: 'java'
     apply plugin: 'jacoco'
+    apply plugin: 'net.ltgt.errorprone'
 
 
-    sourceCompatibility = 1.8
-    targetCompatibility = 1.8
-    test {
-        forkEvery = 1
+
+    tasks.withType(JavaCompile,{
+        options.compilerArgs.addAll(["--release", "8"]) // jdk 11 flag
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    })
+
+
+    tasks.withType(Test) {
+        //forkEvery = 1
         testLogging {
             exceptionFormat = 'full'
+          //  showStandardStreams = true
         }
     }
 
 
     dependencies {
-        compileOnly('org.projectlombok:lombok:1.16.20')
-        testCompileOnly('org.projectlombok:lombok:1.16.20')
+        ["annotationProcessor", "testAnnotationProcessor", "compileOnly", "testCompileOnly"].each { conf ->
+            add(conf, "org.projectlombok:lombok:${lombokVersion}")
+        }
+        errorprone("com.google.errorprone:error_prone_core:${errorProneVersion}")
+   }
+    tasks.withType(JavaCompile).configureEach {
+        options.errorprone.disableWarningsInGeneratedCode = true
+
+        options.errorprone.enabled  = (it.name.startsWith("compile") && it.name.endsWith("TestJava") ) ? false:(null != System.getenv("CI"))
+
+
+    }
+    configurations.all {
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
     }
 
 }
@@ -68,16 +87,13 @@ subprojects {
 task codeCoverageReport(type: JacocoReport) {
     executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
 
-    sourceSets project('grpc-spring-boot-starter').sourceSets.main
-
-    //subprojects.each {
-    //sourceSets it.sourceSets.main
-    //}
+    sourceSets (project('grpc-spring-boot-starter').sourceSets.main
+            ,project('grpc-client-spring-boot-starter').sourceSets.main)
 
     reports {
         xml.enabled true
-        xml.destination "${buildDir}/reports/jacoco/report.xml"
-        html.enabled false
+        xml.destination  = new File(buildDir,"reports/jacoco/report.xml")
+        html.enabled true
         csv.enabled false
     }
 }
@@ -85,3 +101,9 @@ task codeCoverageReport(type: JacocoReport) {
 codeCoverageReport.dependsOn {
     subprojects*.test
 }
+subprojects {
+    tasks.withType(Test,{t->
+        t.environment.put("TESTCONTAINERS_REUSE_ENABLE","true")
+    })
+}
+

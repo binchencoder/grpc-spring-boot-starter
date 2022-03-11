@@ -1,0 +1,5 @@
+grpc:
+  netty-server:
+    primary-listen-address: localhost:0
+    keep-alive-time: 5s
+    max-inbound-message-size: 10MB

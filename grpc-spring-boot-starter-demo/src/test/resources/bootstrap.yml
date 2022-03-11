@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: grpc-demo
+  cloud:
+    consul:
+      discovery:
+        enabled: false
+      enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
+    config:
+      uri: http://localhost:${config.port:8888}
+embedded:
+  consul:
+    enabled: false
+    reuse-container: true
+  keycloak:
+    enabled: false
+    wait-timeout-in-seconds: 120
+    reuse-container: true
+    db-vendor: h2
+    env:
+      JAVA_OPTS_APPEND: "-Xms1024m -Xmx1024m"
+  containers:
+    enabled: false
+    force-shutdown: true

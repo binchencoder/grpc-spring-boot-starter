@@ -5,18 +5,19 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.examples.GreeterGrpc;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.lognet.springboot.grpc.OrderedInterceptorsTest.TheConfiguration;
-import org.lognet.springboot.grpc.context.LocalRunningGrpcPort;
 import org.lognet.springboot.grpc.demo.DemoApp;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import java.util.ArrayList;
@@ -30,11 +31,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = {DemoApp.class, TheConfiguration.class},
-    webEnvironment = WebEnvironment.NONE, properties = "grpc.port=7778")
+    webEnvironment = WebEnvironment.NONE, properties = {"grpc.port=7778","grpc.shutdownGrace=-1"})
+@ActiveProfiles("disable-security")
 public class OrderedInterceptorsTest extends GrpcServerTestBase{
 
-  @LocalRunningGrpcPort
-  int runningPort;
+
 
   private static List<Integer> calledInterceptors = new ArrayList<>();
 
@@ -46,19 +47,20 @@ public class OrderedInterceptorsTest extends GrpcServerTestBase{
   }
 
   @Override
-  protected void beforeGreeting() {
+  protected GreeterGrpc.GreeterFutureStub beforeGreeting(GreeterGrpc.GreeterFutureStub stub) {
     Assert.assertEquals(7778, runningPort);
     Assert.assertEquals(getPort(), runningPort);
+    return stub;
   }
 
   @Override
   protected void afterGreeting() {
-    assertThat(calledInterceptors).containsExactly(1, 2, 3, 4,5,6, 10, 100);
+    assertThat(calledInterceptors).containsExactly(1, 2, 3, 4,5,6, 7,8,10,10, 100);
   }
 
 
 
-  @Configuration
+  @TestConfiguration
   public static class TheConfiguration {
 
 
@@ -155,6 +157,34 @@ public class OrderedInterceptorsTest extends GrpcServerTestBase{
 
     @Bean
     @GRpcGlobalInterceptor
+    @Order(7)
+    public  ServerInterceptor mySeventhInterceptor(){
+      return  new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            calledInterceptors.add(7);
+            return next.startCall(call, headers);
+
+        }
+      };
+    }
+
+    @Bean
+    @GRpcGlobalInterceptor
+    @Order
+    public  ServerInterceptor myOrderedMethodFactoryBeanInterceptor(){
+      return  new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+          calledInterceptors.add(10);
+          return next.startCall(call, headers);
+
+        }
+      };
+    }
+
+    @Bean
+    @GRpcGlobalInterceptor
     public  ServerInterceptor myInterceptor(){
       return new MyInterceptor();
     }
@@ -171,6 +201,23 @@ public class OrderedInterceptorsTest extends GrpcServerTestBase{
          return 5;
        }
      }
+
+
+
+    @Bean
+    @Order(8)
+    @GRpcGlobalInterceptor
+    public  ServerInterceptor my8thInterceptor(){
+      return new My8Interceptor();
+    }
+
+    static class My8Interceptor implements ServerInterceptor {
+      @Override
+      public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        calledInterceptors.add(8);
+        return next.startCall(call, headers);
+      }
+    }
 
   }
 }

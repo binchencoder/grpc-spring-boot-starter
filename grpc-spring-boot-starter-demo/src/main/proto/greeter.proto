@@ -1,5 +1,5 @@
 syntax = "proto3";
-
+import "google/protobuf/empty.proto";
 option java_package = "io.grpc.examples";
 
 
@@ -8,10 +8,33 @@ option java_package = "io.grpc.examples";
 service Greeter {
     // Sends a greeting
     rpc SayHello ( HelloRequest) returns (  HelloReply) {}
+    rpc SayManyHellos (stream HelloRequest) returns (stream HelloReply) {}
+    rpc SayAuthHello ( google.protobuf.Empty) returns (  HelloReply) {}
+    rpc SayAuthOnlyHello ( google.protobuf.Empty) returns (  HelloReply) {}
+    rpc HelloPersonValidResponse ( Person) returns (  Person) {}
+    rpc HelloPersonInvalidResponse ( Person) returns (  Person) {}
+
+}
+service SecuredGreeter {
+    rpc SayAuthHello ( google.protobuf.Empty) returns (  HelloReply) {}
+    rpc SayAuthHello2 ( google.protobuf.Empty) returns (  HelloReply) {}
+
+    rpc secured_methods_with_UnderScoRes(google.protobuf.Empty) returns (google.protobuf.Empty){}
+    rpc AnotherSecured_methods_with_UnderScoRes(google.protobuf.Empty) returns (google.protobuf.Empty){}
+
 
 }
 
+message Person {
+    string name = 1;
+    uint32 age =2;
+    Address address =3;
+    string nickName=4;
+}
 
+message Address{
+    string city =1;
+}
 // The request message containing the user's name.
 message HelloRequest {
     string name = 1;

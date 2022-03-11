@@ -1,0 +1,18 @@
+management:
+  metrics:
+    export:
+      simple:
+        enabled: false
+  endpoints:
+    web:
+      base-path: "/"
+      exposure:
+        include: "*"
+grpc:
+  security:
+    cert-chain: classpath:cert/server-cert.pem
+    private-key: classpath:cert/server-key.pem
+
+logging:
+  level:
+    root: INFO
